@@ -152,14 +152,23 @@ def main():
     )
 
     best_rf.fit(X_train_resampled, y_train_resampled)
+    
+    # --- NEW: Evaluate on Training Data ---
+    print("\n--- Random Forest Training Set Evaluation ---")
+    y_pred_rf_train = best_rf.predict(X_train_resampled)
+    y_proba_rf_train = best_rf.predict_proba(X_train_resampled)[:, 1]
+    print(f"Random Forest Train Accuracy: {accuracy_score(y_train_resampled, y_pred_rf_train):.4f}")
+    print(classification_report(y_train_resampled, y_pred_rf_train, target_names=["Not CKD", "CKD"]))
+    plot_confusion_and_roc(y_train_resampled, y_pred_rf_train, y_proba_rf_train, "Random Forest (Training Set)")
 
-    y_pred_rf = best_rf.predict(X_test_scaled)
-    y_proba_rf = best_rf.predict_proba(X_test_scaled)[:, 1]
+    # --- Evaluate on Test Data ---
+    print("\n--- Random Forest Test Set Evaluation ---")
+    y_pred_rf_test = best_rf.predict(X_test_scaled)
+    y_proba_rf_test = best_rf.predict_proba(X_test_scaled)[:, 1]
+    print(f"Random Forest Test Accuracy: {accuracy_score(y_test, y_pred_rf_test):.4f}")
+    print(classification_report(y_test, y_pred_rf_test, target_names=["Not CKD", "CKD"]))
+    plot_confusion_and_roc(y_test, y_pred_rf_test, y_proba_rf_test, "Random Forest (Test Set)")
 
-    print(f"Random Forest Test Accuracy: {accuracy_score(y_test, y_pred_rf):.4f}")
-    print(classification_report(y_test, y_pred_rf, target_names=["Not CKD", "CKD"]))
-
-    plot_confusion_and_roc(y_test, y_pred_rf, y_proba_rf, "Random Forest")
 
     # ---------------- LightGBM ----------------
     print("\n--- Training LightGBM ---")
@@ -181,14 +190,22 @@ def main():
     grid_lgb.fit(X_train_resampled, y_train_resampled)
     best_lgb = grid_lgb.best_estimator_
 
-    y_pred_lgb = best_lgb.predict(X_test_scaled)
-    y_proba_lgb = best_lgb.predict_proba(X_test_scaled)[:, 1]
-
+    # --- NEW: Evaluate on Training Data ---
+    print("\n--- LightGBM Training Set Evaluation ---")
+    y_pred_lgb_train = best_lgb.predict(X_train_resampled)
+    y_proba_lgb_train = best_lgb.predict_proba(X_train_resampled)[:, 1]
+    print(f"LightGBM Train Accuracy: {accuracy_score(y_train_resampled, y_pred_lgb_train):.4f}")
+    print(classification_report(y_train_resampled, y_pred_lgb_train, target_names=["Not CKD", "CKD"]))
+    plot_confusion_and_roc(y_train_resampled, y_pred_lgb_train, y_proba_lgb_train, "LightGBM (Training Set)")
+    
+    # --- Evaluate on Test Data ---
+    print("\n--- LightGBM Test Set Evaluation ---")
+    y_pred_lgb_test = best_lgb.predict(X_test_scaled)
+    y_proba_lgb_test = best_lgb.predict_proba(X_test_scaled)[:, 1]
     print(f"Best LGBM Params: {grid_lgb.best_params_}")
-    print(f"LightGBM Test Accuracy: {accuracy_score(y_test, y_pred_lgb):.4f}")
-    print(classification_report(y_test, y_pred_lgb, target_names=["Not CKD", "CKD"]))
-
-    plot_confusion_and_roc(y_test, y_pred_lgb, y_proba_lgb, "LightGBM")
+    print(f"LightGBM Test Accuracy: {accuracy_score(y_test, y_pred_lgb_test):.4f}")
+    print(classification_report(y_test, y_pred_lgb_test, target_names=["Not CKD", "CKD"]))
+    plot_confusion_and_roc(y_test, y_pred_lgb_test, y_proba_lgb_test, "LightGBM (Test Set)")
 
 
 if __name__ == "__main__":
