@@ -59,6 +59,11 @@ def load_or_train_model():
 
     df = preprocess_data(df)
 
+    # Check if 'classification' column exists after preprocessing
+    if 'classification' not in df.columns:
+        print("❌ ERROR: 'classification' column missing from ckd_dataset1.csv after preprocessing.")
+        return
+        
     X = df.drop("classification", axis=1)
     y = df["classification"]
 
@@ -176,6 +181,15 @@ def preprocess_input_manual(data):
     """
     global FEATURE_COLUMNS
 
+    # Ensure feature columns are loaded
+    if FEATURE_COLUMNS is None:
+        print("Error: FEATURE_COLUMNS is None. Model may not be loaded.")
+        # Attempt to load just in case, though this should be handled by load_or_train_model
+        load_or_train_model()
+        if FEATURE_COLUMNS is None:
+             raise ValueError("Model features are not loaded. Cannot process input.")
+
+
     input_dict = {col: 0 for col in FEATURE_COLUMNS}
 
     # Direct mapped numeric values
@@ -205,12 +219,16 @@ def preprocess_input_manual(data):
 
     for key, col in field_map.items():
         if col in input_dict:
-            input_dict[col] = float(data.get(key, 0))
+            # Get value, default to 0 if empty or not found
+            value = data.get(key)
+            if value == '' or value is None:
+                value = 0
+            input_dict[col] = float(value)
 
     # Handle OHE (sg, al, su)
-    sg = float(data.get("sg"))
-    al = float(data.get("al"))
-    su = float(data.get("su"))
+    sg = float(data.get("sg", 0)) # Default to 0 or a sensible default
+    al = float(data.get("al", 0))
+    su = float(data.get("su", 0))
 
     # SG
     for val in [1.010, 1.015, 1.020, 1.025]:
@@ -246,35 +264,27 @@ def home(request):
 def predict_ckd(request):
     global MODEL, SCALER, FEATURE_COLUMNS
 
-    prediction_text = None
-    csv_html = None
-
     # Check if model is loaded
     if MODEL is None or SCALER is None or FEATURE_COLUMNS is None:
         load_or_train_model() # Try to load/train again
         if MODEL is None:
-            # If still None, render error
             return render(request, "app/predict.html", {
-                "prediction_text": "ERROR: Model could not be loaded. Check logs.",
+                "error_message": "ERROR: Model could not be loaded. Check logs.",
             })
 
     # ================= CSV UPLOAD =================
     if request.method == "POST" and "csv_submit" in request.POST:
         csv_file = request.FILES.get("csv_file")
+        csv_html = None
+
         if not csv_file:
-             return render(request, "app/predict.html", {"csv_html": "<div class='alert alert-danger'>No file uploaded.</div>"})
+             return render(request, "app/predict.html", {"csv_error": "No file uploaded."})
 
         try:
             df_display = pd.read_csv(csv_file)
-            # Make a copy for processing
             df_processed = preprocess_data(df_display.copy()) 
 
-            # Align processed df with the model's feature columns
-            # Create a new DataFrame with all feature columns, initialized to 0
             df_model_input = pd.DataFrame(0, index=df_processed.index, columns=FEATURE_COLUMNS)
-
-            # Fill in the values from df_processed for columns that match
-            # This handles both alignment and adding missing OHE columns as 0
             common_cols = [col for col in df_processed.columns if col in FEATURE_COLUMNS]
             if common_cols:
                 df_model_input[common_cols] = df_processed[common_cols]
@@ -282,30 +292,40 @@ def predict_ckd(request):
             df_scaled = SCALER.transform(df_model_input)
             predictions = MODEL.predict(df_scaled)
 
-            # Add prediction to the *original* display DataFrame
-            df_display["Predicted_Risk"] = ["CKD Positive" if p == 1 else "CKD Negative" for p in predictions]
-            csv_html = df_display.to_html(classes="table table-bordered table-striped", index=False)
+            # --- NEW LOGIC START ---
+            # Instead of using the full df_display, we create a new simple DataFrame
+            results_df = pd.DataFrame()
+            results_df["Row Number"] = range(1, len(df_display) + 1)
+            results_df["Prediction"] = ["CKD Positive" if p == 1 else "CKD Negative" for p in predictions]
+            
+            # Convert ONLY this new DataFrame to HTML
+            csv_html = results_df.to_html(classes="table table-bordered table-striped text-center", index=False)
+            # --- NEW LOGIC END ---
 
         except Exception as e:
-            # Handle potential errors during file processing
             csv_html = f"<div class='alert alert-danger'>Error processing CSV file: {e}. Make sure the CSV format is correct.</div>"
 
-        return render(request, "app/predict.html", {"csv_html": csv_html})
+        return render(request, "app/result.html", {"csv_html": csv_html})
 
     # ================= MANUAL FORM =================
     if request.method == "POST":
+        prediction_text = None
         try:
             df = preprocess_input_manual(request.POST)
             df_scaled = SCALER.transform(df)
             result = MODEL.predict(df_scaled)[0]
-
             prediction_text = "CKD Positive" if result == 1 else "CKD Negative"
         
         except Exception as e:
             prediction_text = f"Error during prediction: {e}"
 
+        return render(request, "app/result.html", {
+            "prediction_text": prediction_text,
+            "csv_html": None
+        })
 
+    # ================= INITIAL GET REQUEST =================
     return render(request, "app/predict.html", {
-        "prediction_text": prediction_text,
-        "csv_html": csv_html
+        "prediction_text": None,
+        "csv_html": None
     })
