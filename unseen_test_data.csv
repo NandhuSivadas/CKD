@@ -1,2 +1,2 @@
-age,bp,sg,al,su,rbc,pc,pcc,ba,bgr,bu,sc,sod,pot,hemo,pcv,wbcc,rbcc,htn,dm,cad,appet,pe,ane,class
-72,95,1.010,4.0,3.0,abnormal,abnormal,present,present,150,90,4.2,128,6.0,8.5,28,10000,3.0,yes,yes,yes,poor,yes,yes,ckd
+age,bp,sg,al,su,rbc,pc,pcc,ba,bgr,bu,sc,sod,pot,hemo,pcv,wbcc,rbcc,htn,dm,cad,appet,pe,ane
+45,70,1.025,0,0,normal,normal,notpresent,notpresent,100,30,1.0,140,4.5,15,45,7000,5.0,no,no,no,good,no,no

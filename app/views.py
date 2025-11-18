@@ -135,7 +135,7 @@ def preprocess_data(df):
         'packed_cell_volume','white_blood_cell_count','red_blood_cell_count'
     ]
     for c in numeric_cols:
-        if c in df.columns: # Check if column exists before processing
+        if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
             df[c].fillna(df[c].median(), inplace=True)
 
@@ -155,13 +155,12 @@ def preprocess_data(df):
     ]
     
     for c in binary_cols:
-        if c in df.columns: # Check if column exists
+        if c in df.columns:
             df[c] = df[c].replace(binary_map)
     
     # Handle classification separately
     if "classification" in df.columns:
         df["classification"] = df["classification"].replace(binary_map)
-
 
     # OHE
     ohe_cols = ['specific_gravity', 'albumin', 'sugar']
@@ -184,11 +183,9 @@ def preprocess_input_manual(data):
     # Ensure feature columns are loaded
     if FEATURE_COLUMNS is None:
         print("Error: FEATURE_COLUMNS is None. Model may not be loaded.")
-        # Attempt to load just in case, though this should be handled by load_or_train_model
         load_or_train_model()
         if FEATURE_COLUMNS is None:
              raise ValueError("Model features are not loaded. Cannot process input.")
-
 
     input_dict = {col: 0 for col in FEATURE_COLUMNS}
 
@@ -219,18 +216,17 @@ def preprocess_input_manual(data):
 
     for key, col in field_map.items():
         if col in input_dict:
-            # Get value, default to 0 if empty or not found
             value = data.get(key)
             if value == '' or value is None:
                 value = 0
             input_dict[col] = float(value)
 
     # Handle OHE (sg, al, su)
-    sg = float(data.get("sg", 0)) # Default to 0 or a sensible default
+    sg = float(data.get("sg", 0))
     al = float(data.get("al", 0))
     su = float(data.get("su", 0))
 
-    # SG
+    # SG - Specific Gravity
     for val in [1.010, 1.015, 1.020, 1.025]:
         colname = f"specific_gravity_{val}"
         if colname in input_dict:
@@ -266,7 +262,7 @@ def predict_ckd(request):
 
     # Check if model is loaded
     if MODEL is None or SCALER is None or FEATURE_COLUMNS is None:
-        load_or_train_model() # Try to load/train again
+        load_or_train_model()
         if MODEL is None:
             return render(request, "app/predict.html", {
                 "error_message": "ERROR: Model could not be loaded. Check logs.",
@@ -292,15 +288,16 @@ def predict_ckd(request):
             df_scaled = SCALER.transform(df_model_input)
             predictions = MODEL.predict(df_scaled)
 
-            # --- NEW LOGIC START ---
-            # Instead of using the full df_display, we create a new simple DataFrame
-            results_df = pd.DataFrame()
-            results_df["Row Number"] = range(1, len(df_display) + 1)
-            results_df["Prediction"] = ["CKD Positive" if p == 1 else "CKD Negative" for p in predictions]
+            # Create HTML table with custom styling for predictions
+            csv_html = "<table class='table table-bordered text-center'>"
+            csv_html += "<thead><tr><th>Prediction</th></tr></thead><tbody>"
             
-            # Convert ONLY this new DataFrame to HTML
-            csv_html = results_df.to_html(classes="table table-bordered table-striped text-center", index=False)
-            # --- NEW LOGIC END ---
+            for prediction in predictions:
+                pred_text = "CKD Positive" if prediction == 1 else "CKD Negative"
+                css_class = "ckd-positive" if prediction == 1 else "ckd-negative"
+                csv_html += f"<tr class='{css_class}'><td>{pred_text}</td></tr>"
+            
+            csv_html += "</tbody></table>"
 
         except Exception as e:
             csv_html = f"<div class='alert alert-danger'>Error processing CSV file: {e}. Make sure the CSV format is correct.</div>"
