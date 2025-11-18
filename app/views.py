@@ -135,7 +135,7 @@ def preprocess_data(df):
         'packed_cell_volume','white_blood_cell_count','red_blood_cell_count'
     ]
     for c in numeric_cols:
-        if c in df.columns:
+        if c in df.columns: # Check if column exists before processing
             df[c] = pd.to_numeric(df[c], errors="coerce")
             df[c].fillna(df[c].median(), inplace=True)
 
@@ -155,12 +155,13 @@ def preprocess_data(df):
     ]
     
     for c in binary_cols:
-        if c in df.columns:
+        if c in df.columns: # Check if column exists
             df[c] = df[c].replace(binary_map)
     
     # Handle classification separately
     if "classification" in df.columns:
         df["classification"] = df["classification"].replace(binary_map)
+
 
     # OHE
     ohe_cols = ['specific_gravity', 'albumin', 'sugar']
@@ -186,6 +187,7 @@ def preprocess_input_manual(data):
         load_or_train_model()
         if FEATURE_COLUMNS is None:
              raise ValueError("Model features are not loaded. Cannot process input.")
+
 
     input_dict = {col: 0 for col in FEATURE_COLUMNS}
 
@@ -226,7 +228,7 @@ def preprocess_input_manual(data):
     al = float(data.get("al", 0))
     su = float(data.get("su", 0))
 
-    # SG - Specific Gravity
+    # SG
     for val in [1.010, 1.015, 1.020, 1.025]:
         colname = f"specific_gravity_{val}"
         if colname in input_dict:
@@ -255,56 +257,54 @@ def home(request):
 
 
 # =====================================================
-# PREDICT FUNCTION
+# PREDICT FUNCTION (Handles BOTH Manual and CSV)
 # =====================================================
 def predict_ckd(request):
     global MODEL, SCALER, FEATURE_COLUMNS
 
     # Check if model is loaded
     if MODEL is None or SCALER is None or FEATURE_COLUMNS is None:
-        load_or_train_model()
+        load_or_train_model() # Try to load/train again
         if MODEL is None:
             return render(request, "app/predict.html", {
                 "error_message": "ERROR: Model could not be loaded. Check logs.",
             })
 
-    # ================= CSV UPLOAD =================
+    # ================= CSV UPLOAD (POST request) =================
     if request.method == "POST" and "csv_submit" in request.POST:
         csv_file = request.FILES.get("csv_file")
-        csv_html = None
+        prediction_text = None
 
         if not csv_file:
-             return render(request, "app/predict.html", {"csv_error": "No file uploaded."})
+            return render(request, "app/predict.html", {"csv_error": "No file uploaded."})
 
         try:
             df_display = pd.read_csv(csv_file)
+            
+            # --- NEW LOGIC: Preprocess and get FIRST ROW ---
             df_processed = preprocess_data(df_display.copy()) 
-
-            df_model_input = pd.DataFrame(0, index=df_processed.index, columns=FEATURE_COLUMNS)
+            
+            # Create DataFrame for 1 row based on model columns
+            df_model_input = pd.DataFrame(0, index=[0], columns=FEATURE_COLUMNS) 
             common_cols = [col for col in df_processed.columns if col in FEATURE_COLUMNS]
+            
             if common_cols:
-                df_model_input[common_cols] = df_processed[common_cols]
+                # Get just the first row's data
+                df_model_input[common_cols] = df_processed[common_cols].iloc[0]
 
             df_scaled = SCALER.transform(df_model_input)
-            predictions = MODEL.predict(df_scaled)
-
-            # Create HTML table with custom styling for predictions
-            csv_html = "<table class='table table-bordered text-center'>"
-            csv_html += "<thead><tr><th>Prediction</th></tr></thead><tbody>"
+            prediction = MODEL.predict(df_scaled)[0] # Get the single prediction
             
-            for prediction in predictions:
-                pred_text = "CKD Positive" if prediction == 1 else "CKD Negative"
-                css_class = "ckd-positive" if prediction == 1 else "ckd-negative"
-                csv_html += f"<tr class='{css_class}'><td>{pred_text}</td></tr>"
-            
-            csv_html += "</tbody></table>"
+            # CORRECTED LOGIC: Set text result instead of HTML table
+            prediction_text = "CKD Positive" if prediction == 1 else "CKD Negative"
 
         except Exception as e:
-            csv_html = f"<div class='alert alert-danger'>Error processing CSV file: {e}. Make sure the CSV format is correct.</div>"
+            prediction_text = f"Error processing CSV file: {e}. Make sure the CSV format is correct."
 
-        return render(request, "app/result.html", {"csv_html": csv_html})
+        # Render result using prediction_text so the template shows the colored card
+        return render(request, "app/result.html", {"prediction_text": prediction_text})
 
-    # ================= MANUAL FORM =================
+    # ================= MANUAL FORM (POST request) =================
     if request.method == "POST":
         prediction_text = None
         try:
@@ -316,13 +316,10 @@ def predict_ckd(request):
         except Exception as e:
             prediction_text = f"Error during prediction: {e}"
 
+        # Render the result
         return render(request, "app/result.html", {
-            "prediction_text": prediction_text,
-            "csv_html": None
+            "prediction_text": prediction_text
         })
 
     # ================= INITIAL GET REQUEST =================
-    return render(request, "app/predict.html", {
-        "prediction_text": None,
-        "csv_html": None
-    })
+    return render(request, "app/predict.html", {})
